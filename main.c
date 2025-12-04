@@ -5,6 +5,8 @@
 #include <string.h>
 #include <ctype.h>
 #include <locale.h>
+#include <sys/stat.h>
+#include <sys/types.h>
 #include "cJSON.h"
 
 // LAST COMMIT: 11-22-2025
@@ -87,6 +89,21 @@ void addTodo(TodoGroup** group, char* _title, bool _completed, char* _descriptio
   }
 }
 
+void addTodoFromHead(TodoGroup** group, char* _title, bool _completed, char* _description) {
+  char *new_title = _title;
+  TodoItem *newItem = createTodo(new_title, _completed, _description);
+  TodoGroup *_group = *group;
+
+  if(_group->todoHead == NULL) {
+    _group->todoHead = newItem;
+    _group->todoTail = newItem;
+  }
+  else {
+    newItem->next = _group->todoHead;
+    _group->todoHead = newItem;
+  }
+}
+
 void deleteTodo(TodoItem *todoDel, TodoGroup** group) {
   TodoGroup *_group = *group; 
   TodoItem *temp;
@@ -136,6 +153,18 @@ void addGroup(TodoPage** page, char* _name) {
   if((*page)->groupTail != NULL) {
     (*page)->groupTail->nextGroup = newGroup;
     (*page)->groupTail = (*page)->groupTail->nextGroup;
+  }
+}
+
+void addGroupFromHead(TodoPage** page, char* _name) {
+  TodoGroup* newGroup = createTodoGroup(_name);
+  if((*page)->groupHead == NULL) {
+    (*page)->groupHead = newGroup;
+    (*page)->groupTail = newGroup;
+  } 
+  else {
+    newGroup->nextGroup = (*page)->groupHead;
+    (*page)->groupHead = newGroup;
   }
 }
 
@@ -534,6 +563,11 @@ void readTodoList(TodoPage** head) {
 
 void writeTodoList(TodoPage* headPage) { // Write Page
   FILE *todoDataFile = fopen("/home/user23565/.config/ballsonfire/data.txt", "wb");
+  if(todoDataFile == NULL) { 
+    mkdir("/home/user23565/.config/ballsonfire", 0755);
+    writeTodoList(headPage);
+    return; 
+  }
   
   TodoPage *currentPage; 
   TodoGroup *currentGroup;
@@ -662,6 +696,7 @@ void TodoApp() {
       if(pageName && (strlen(pageName) > 0 && *pageName != '\0')) {
         addPage(&headPage, pageName);
         selectedPage = headPage;
+        continue;
       }
 
       // endTempPopup(mainWindow, &glSubWin, &glPanel);
@@ -886,12 +921,12 @@ void TodoApp() {
             // mvwprintw(mainWindow, 10, 23, "haha tite");
             if(strcmp(adding, "Item") == 0) {
               if(selectedGroup == NULL) {
-                addGroup(&selectedPage, "NEW GROUP");
-                addTodo(&selectedPage->groupHead, addBuffer, false, NULL);
+                addGroupFromHead(&selectedPage, "NEW GROUP");
+                addTodoFromHead(&selectedPage->groupHead, addBuffer, false, NULL);
                 selectedGroup = selectedPage->groupHead;
               }
               else {
-                addTodo(&selectedGroup, addBuffer, false, NULL);
+                addTodoFromHead(&selectedGroup, addBuffer, false, NULL);
               }
               bottom_panel(panel1);
               mode = TODO;
@@ -899,7 +934,7 @@ void TodoApp() {
               goto exitAdd;
             } 
             else if(strcmp(adding, "Group") == 0) {
-              addGroup(&selectedPage, addBuffer);
+              addGroupFromHead(&selectedPage, addBuffer);
               bottom_panel(panel1);
               mode = TODO;
               memset(addBuffer, 0, sizeof(addBuffer));

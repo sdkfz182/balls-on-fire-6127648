@@ -2,11 +2,16 @@ CC = gcc
 CFLAGS = -g
 LIBS = -lncurses -lpanel 
 
-all: app
+TARGET = balls-on-fire
 
-app: main.c
-	$(CC) $(CFLAGS) main.c cJSON.c -o app $(LIBS)
+all: $(TARGET)
+
+$(TARGET): main.c cJSON.c
+	$(CC) $(CFLAGS) main.c cJSON.c -o $(TARGET) $(LIBS)
+
+install: 
+	sudo install -m 755 $(TARGET) /usr/local/bin/
 
 clean:
-	rm -f app
+	rm -f $(TARGET)
 
