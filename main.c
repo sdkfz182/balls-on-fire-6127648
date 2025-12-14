@@ -22,6 +22,7 @@ v0.2
  - Popup when saving
  - Binded item delted to 'd'
  - Mark/Unmark as complete with 'm'
+
 */
 
 void placeholderVoid () {
@@ -53,11 +54,13 @@ typedef struct TodoGroup {
 typedef struct TodoPage {
     char *name;
     struct TodoPage *nextPage;
+    struct TodoPage *prevPage;
     TodoGroup *groupHead;
     TodoGroup *groupTail;
 } TodoPage;
 
 typedef enum {
+    BUFFER,
     TODO,
     MENU,
     ADD,
@@ -105,20 +108,21 @@ typedef struct TDLContext {
 } TDLContext;
 
 TodoItem *createTodo(char *_title, bool _completed, char* _description) {
-    char* newStr = (char*)malloc(strlen(_title) * 2);
-    strcpy(newStr, _title);
+    char* newName = (char*)malloc(strlen(_title) + 1);
+    char* newDesc = (char*)malloc(strlen(_description) + 1);
+    strcpy(newName, _title);
+    strcpy(newDesc, _description);
     TodoItem* newTodo = (TodoItem*)malloc(sizeof(TodoItem));
     newTodo->completed = _completed;
-    newTodo->name = newStr;
-    newTodo->description = _description;
+    newTodo->name = newName;
+    newTodo->description = newDesc;
     newTodo->prev = NULL;
     newTodo->next = NULL;
     return newTodo;
 }
 
 void addTodo(TodoGroup** group, char* _title, bool _completed, char* _description) {
-    char *new_title = _title;
-    TodoItem *newItem = createTodo(new_title, _completed, _description);
+    TodoItem *newItem = createTodo(_title, _completed, _description);
     TodoGroup *_group = *group;
     if(_group->todoHead == NULL) {
         _group->todoHead = newItem;
@@ -134,8 +138,7 @@ void addTodo(TodoGroup** group, char* _title, bool _completed, char* _descriptio
 }
 
 void addTodoFromHead(TodoGroup** group, char* _title, bool _completed, char* _description) {
-    char *new_title = _title;
-    TodoItem *newItem = createTodo(new_title, _completed, _description);
+    TodoItem *newItem = createTodo(_title, _completed, _description);
     TodoGroup *_group = *group;
 
     if(_group->todoHead == NULL) {
@@ -144,6 +147,7 @@ void addTodoFromHead(TodoGroup** group, char* _title, bool _completed, char* _de
     }
     else {
         newItem->next = _group->todoHead;
+        _group->todoHead->prev = newItem;
         _group->todoHead = newItem;
     }
 }
@@ -155,9 +159,14 @@ void deleteTodo(TodoItem *todoDel, TodoGroup** group) {
 
     if(_group->todoHead != NULL) { temp = _group->todoHead; }
     else { return; }
-    if(temp == todoDel) {
+    if(temp == todoDel) { // If its the head;
+        if(temp->next != NULL) temp->next->prev = NULL;
         _group->todoHead = temp->next;
+        if(_group->todoTail == temp) {
+            _group->todoTail = NULL;
+        }
         free(temp->name);
+        free(temp->description);
         free(temp);
         return;
     }
@@ -168,14 +177,21 @@ void deleteTodo(TodoItem *todoDel, TodoGroup** group) {
         if(temp == todoDel) { break; }
     }
 
+    if(temp != todoDel) return;
+
+    if(temp->next != NULL) temp->next->prev = prev;
     prev->next = temp->next;
+    if(_group->todoTail == temp) {
+        _group->todoTail = prev;
+    }
     free(temp->name);
+    free(temp->description);
     free(temp);
     return;
 }
 
 TodoGroup* createTodoGroup(char *_name) {
-    char* newStr = (char*)malloc(strlen(_name) * 2);
+    char* newStr = (char*)malloc(strlen(_name) + 1);
     strcpy(newStr, _name);
     TodoGroup *newGroup = (TodoGroup*)malloc(sizeof(TodoGroup));
     newGroup->name = newStr;
@@ -209,6 +225,7 @@ void addGroupFromHead(TodoPage** page, char* _name) {
         (*page)->groupTail = newGroup;
     } 
     else {
+        (*page)->groupHead->prevGroup = newGroup;
         newGroup->nextGroup = (*page)->groupHead;
         (*page)->groupHead = newGroup;
     }
@@ -221,42 +238,40 @@ void deleteTodoGroup(TodoGroup *groupDel, TodoPage **page) {
     TodoItem *tempItem;
 
     if(_page->groupHead != NULL) { tempGroup = _page->groupHead; }
-    if(tempGroup == groupDel) {
-        if(tempGroup->todoHead != NULL) {
-            tempItem = tempGroup->todoHead;
-            while(tempGroup->todoHead != NULL) {
-                tempItem = tempGroup->todoHead;
-                while(tempItem->next != NULL) {
-                    tempItem = tempItem->next;
-                }
-                deleteTodo(tempItem, &tempGroup);
-            }
-        } 
+    else return;
 
+    // If the head is to be deleted. 
+    if(groupDel == tempGroup) {
+        while(tempGroup->todoTail != NULL) {
+            tempItem = tempGroup->todoTail;
+            deleteTodo(tempItem, &tempGroup);
+        }
         _page->groupHead = tempGroup->nextGroup;
+        if(tempGroup->nextGroup != NULL) tempGroup->nextGroup->prevGroup = NULL;
+        if(_page->groupTail == tempGroup) _page->groupTail = NULL;
+
         free(tempGroup->name);
         free(tempGroup);
         return;
     }
 
+    // Traverses the list until it finds the group to be deleted.
     while(tempGroup->nextGroup != NULL) {
         prev = tempGroup;
         tempGroup = tempGroup->nextGroup;
         if(tempGroup == groupDel) { break; }
     }
 
-    // Delete todos of the group
-    if(tempGroup->todoHead != NULL) {
-        tempItem = tempGroup->todoHead;
-        while(tempGroup->todoHead != NULL) {
-            tempItem = tempGroup->todoHead;
-            while(tempItem->next != NULL) {
-                tempItem = tempItem->next;
-            }
-            deleteTodo(tempItem, &tempGroup);
-        }
-    }
+    if(tempGroup != groupDel) return;
 
+    // Delete todos of the group
+    while(tempGroup->todoTail != NULL) {
+        tempItem = tempGroup->todoTail;
+        deleteTodo(tempItem, &tempGroup);
+    }
+    
+    if(tempGroup->nextGroup != NULL) tempGroup->nextGroup->prevGroup = prev;
+    if(_page->groupTail == tempGroup) _page->groupTail = prev;
     prev->nextGroup = tempGroup->nextGroup;
     free(tempGroup->name);
     free(tempGroup);
@@ -264,8 +279,10 @@ void deleteTodoGroup(TodoGroup *groupDel, TodoPage **page) {
 }
 
 TodoPage* createPage(char* _name) {
+    char *newStr = (char*)malloc(strlen(_name) + 1);
+    strcpy(newStr, _name);
     TodoPage* newPage = (TodoPage*)malloc(sizeof(TodoPage));
-    newPage->name = _name;
+    newPage->name = newStr;
     newPage->nextPage = NULL;
     newPage->groupHead = NULL;
     newPage->groupTail = NULL;
@@ -274,7 +291,7 @@ TodoPage* createPage(char* _name) {
 
 void addPage(TodoPage** head, char* _name) {
     TodoPage* newPage = createPage(_name);
-    //addGroup(newPage->name, &newPage); 
+    //addGroup(newPage->name, &newPage);
 
     if(*head == NULL) {
         *head = newPage;
@@ -285,6 +302,10 @@ void addPage(TodoPage** head, char* _name) {
         }
         temp->nextPage = newPage;
     }
+}
+
+void deletePage() {
+
 }
 
 void printStrikethrough(WINDOW *window, int y, int x, char* str) {
@@ -323,6 +344,11 @@ void displayPage(TDLContext *ctx,int* _a, int *sX, int *sY) {
     char collapsedChar = 'V';
 
     attr_t currentAttribute;
+    attr_t inactivityAttribute;
+
+    init_pair(2, COLOR_GREEN, -1);
+    init_pair(3, 238, -1); // Dark Gray for inactive element 
+    init_pair(4, -1, -1); // Normal Color (no override)
 
     attr_t a_groupHighlight = A_BOLD | A_STANDOUT;
     attr_t a_groupHighlightUnfocus = A_BOLD | A_UNDERLINE;
@@ -331,37 +357,34 @@ void displayPage(TDLContext *ctx,int* _a, int *sX, int *sY) {
     attr_t a_normal = A_NORMAL;
     attr_t a_tickedBox = A_STANDOUT | COLOR_PAIR(2);
 
+    attr_t a_inactive =  COLOR_PAIR(3);
+    attr_t a_active= COLOR_PAIR(4);
+
     char *tickBox = "[ ]";
 
     TodoGroup* currentGroup = NULL;
     if(page != NULL){ currentGroup = page->groupHead; }
-    while(currentGroup != NULL) {
-        init_pair(2, COLOR_GREEN, -1);
+    while(currentGroup != NULL) { // MAIN RENDER LOOP(?)
         if(printY == highlight) {
-            if(mode == TODO) {
-                currentAttribute = a_groupHighlight;  
-
-                *selectedGroup = currentGroup;
-                *selectedItem = NULL;
-                // Calculate move_panel shit 
-                move_panel(_panel3, printY + 1, strlen(currentGroup->name) + 5);
-            }
-            else { 
-                currentAttribute = a_groupHighlightUnfocus; 
-            }
+            currentAttribute = a_groupHighlight;  
+            *selectedGroup = currentGroup;
+            *selectedItem = NULL;
+            // Calculate move_panel shit 
+            move_panel(_panel3, printY + 1, strlen(currentGroup->name) + 5);
+            if(mode != TODO) currentAttribute = currentAttribute | a_inactive;
             *sX = strlen(currentGroup->name) + 20;
             *sY = 1 + printY; 
         }
-        else { 
-            currentAttribute = a_bold; 
+        else {
+            currentAttribute = a_bold;
+            if(mode != TODO) currentAttribute = currentAttribute | a_inactive;
         } 
 
+        // PRINT GROUP 
         wattron(mainWindow, currentAttribute);
-
         if(currentGroup->collapsed == false) { collapsedChar = 'V'; }
         else { collapsedChar = '>'; }
         mvwprintw(mainWindow, 1 + printY, 1, "%c %s", collapsedChar,currentGroup->name);
-
         wattroff(mainWindow, currentAttribute);
 
         printY++;
@@ -372,12 +395,9 @@ void displayPage(TDLContext *ctx,int* _a, int *sX, int *sY) {
             tempItem = currentGroup->todoHead; 
 
             while(tempItem != NULL) {
-                if (printY == highlight) { // If selected
-                    if(mode != TODO && !tempItem->completed) {              
-                        tickBox = "[ ]";
-                        currentAttribute = A_UNDERLINE;
-                    }
-                    else if(tempItem->completed) {
+                if (printY == highlight) { // If selectedItem 
+
+                    if(tempItem->completed) {
                         tickBox = "[X]";
                         currentAttribute = a_tickedBox;
                     }
@@ -385,7 +405,10 @@ void displayPage(TDLContext *ctx,int* _a, int *sX, int *sY) {
                         tickBox = "[ ]";
                         currentAttribute = A_STANDOUT;
                     }
+                    
+                    if(mode != TODO) currentAttribute = currentAttribute | a_inactive;
 
+                        
                     *selectedItem = tempItem;
                     *selectedGroup = currentGroup;
                     //Calculate move_panel shit
@@ -407,8 +430,11 @@ void displayPage(TDLContext *ctx,int* _a, int *sX, int *sY) {
                         tickBox = "[ ]";
                         currentAttribute = A_NORMAL;
                     }
+
+                    if(mode != TODO) currentAttribute = currentAttribute | a_inactive;
                 }
 
+                // PRINT TODO
                 wattron(mainWindow, currentAttribute);
                 if(!tempItem->completed) {
                     mvwprintw(mainWindow, 1 + printY, 1, "  %s %s", tickBox, tempItem->name);
@@ -667,7 +693,7 @@ void writeTodoList(TodoPage* headPage) { // Write Page
                             cJSON *todoObject = cJSON_CreateObject();
                             cJSON_AddStringToObject(todoObject, "name", currentItem->name);
                             cJSON_AddStringToObject(todoObject, "description", currentItem->description);
-                            cJSON_AddBoolToObject(todoObject, "completed", currentItem->completed); 
+                            cJSON_AddBoolToObject(todoObject, "completed", currentItem->completed);
 
                             cJSON_AddItemToArray(todos, todoObject);
                             currentItem = currentItem->next;
@@ -692,51 +718,12 @@ void writeTodoList(TodoPage* headPage) { // Write Page
     cJSON_Delete(root);
 }
 
-/*
 
-void moveMode() {
-    // Move item position logic
-    bool moveMode = true; // true is item false is for groups 
-    bool canMove = true;
 
-    TodoItem *currentItemPosition = NULL;
-    TodoGroup *currentGroupPosition = NULL;
-
-    TodoItem *movingItem = NULL;
-    TodoGroup *movingGroup = NULL;
-
-    if(!selectedGroup && selectedItem) { moveMode = true; }
-    else if(selectedGroup && selectedItem) { moveMode = false; }
-
-    if(moveMode) { // Move item
-        currentItemPosition = selectedItem;
-        movingItem = selectedItem;
-
-        while(canMove) {
-
-            int moveInput = wgetch(mainWindow);
-            if(moveInput == KEY_UP) {
-                if(movingItem->prev != NULL) {
-                    movingItem->prev->next = movingItem->next;
-                    movingItem->next->prev = movingItem->prev;
-                    movingItem->prev->prev = movingItem;
-                    movingItem->next = movingItem->prev;
-                    movingItem->prev = movingItem->prev->prev;
-                    movingItem->prev->next = movingItem;
-                }
-            }
-            else if(moveInput == KEY_ENTER) {
-                break;
-            }
-        } // end loop
-    }
-    else { // Move group
-
-    }
+void moveMode(TDLContext *ctx) {
 
 }
 
-*/
 
 void addMode(TDLContext *ctx) {
     WINDOW *mainWindow = ctx->mainWindow;
@@ -943,7 +930,6 @@ void TodoApp() {
         // RENDER TODOLIST (page)
         // displayPage(ctx.mainWindow, ctx.panel2, ctx.panel3, ctx.selectedPage, &ctx.selectedGroup, &ctx.selectedItem, &ctx.highlight, ctx.mode, &a, &sX, &sY, ctx.xOffset);
         displayPage(&ctx, &a, &sX, &sY);
-
         update_panels();
         doupdate(); 
 
@@ -954,7 +940,7 @@ void TodoApp() {
                 case 'A':
                 case 'a':
                     ctx.mode = ADD;
-                    addMode(&ctx);
+                    continue;
                     break;
                 case 'K':
                 case 'k':
@@ -979,6 +965,11 @@ void TodoApp() {
                         (ctx.selectedGroup)->collapsed = !(ctx.selectedGroup)->collapsed;
                     }
                     else if(ctx.selectedItem != NULL) {
+                        ctx.mode = BUFFER;
+                        displayPage(&ctx, &a, &sX, &sY);
+                        update_panels();
+                        doupdate(); 
+
                         keypad(ctx.mainWindow, FALSE);
                         keypad(ctx.subWin2, TRUE);
                         top_panel(ctx.panel2);
@@ -995,30 +986,48 @@ void TodoApp() {
 
                         int select_input = wgetch(ctx.subWin2);
                         switch(select_input) {
-                        case '1':
-                            (ctx.selectedItem)->completed = !(ctx.selectedItem)->completed;
-                            break;
-                        case '2':
-                            goto rename;
-                            break;
-                        case '3':
-                            break;
-                        case '4':
-                            //moveMode();
+                            case '1':
+                                (ctx.selectedItem)->completed = !(ctx.selectedItem)->completed;
+                                break;
+                            case '2':
+                                ctx.mode = TODO;
+                                bottom_panel(ctx.panel2);
+                                hide_panel(ctx.panel2);
+                                keypad(ctx.subWin2, FALSE);
+                                keypad(ctx.mainWindow, TRUE);
+                                goto rename;
+                                break;
+                            case '3':
+                                break;
+                            case '4':
+                                ctx.mode = TODO;
+                                bottom_panel(ctx.panel2);
+                                hide_panel(ctx.panel2);
+                                keypad(ctx.subWin2, FALSE);
+                                keypad(ctx.mainWindow, TRUE);
+                                //moveMode();
+                                break;
+                            case '5':
+                                deleteTodo(ctx.selectedItem, &ctx.selectedGroup);
+                                ctx.selectedItem = NULL;
+                                break;
+                            default:
+                                break;
                         }
-                    } 
-                    break;
-                case '5':
-                    deleteTodo(ctx.selectedItem, &ctx.selectedGroup);
-                    ctx.selectedItem = NULL;
-                    break;
-                    bottom_panel(ctx.panel2);
-                    hide_panel(ctx.panel2);
-                    keypad(ctx.subWin2, FALSE);
-                    keypad(ctx.mainWindow, TRUE);
+                        ctx.mode = TODO;
+                        bottom_panel(ctx.panel2);
+                        hide_panel(ctx.panel2);
+                        keypad(ctx.subWin2, FALSE);
+                        keypad(ctx.mainWindow, TRUE);
+                    }
                     break;
                 case 'd': 
                     if(ctx.selectedGroup != NULL) {
+                        ctx.mode = BUFFER;
+                        displayPage(&ctx, &a, &sX, &sY);
+                        update_panels();
+                        doupdate(); 
+
                         initPopup(ctx.mainWindow, ctx.subWin3, ctx.panel3, 5, 56);
 
                         mvwprintw(ctx.subWin3, 1, 1, "Are you sure you want to delete this item/group?");
@@ -1036,6 +1045,7 @@ void TodoApp() {
 
                         endPopup(ctx.mainWindow, ctx.subWin3, ctx.panel3);
                         hide_panel(ctx.panel3);
+                        ctx.mode = TODO;
                     }
                     break;
                 case 's':
@@ -1073,12 +1083,15 @@ void TodoApp() {
                         char renameStr[128];
                         snprintf(renameStr, sizeof(renameStr), "RENAME: \"%s\"", groupName);
                         char* newStr = textBox(ctx.mainWindow, &ctx.popupWindow, &ctx.popupPanel, x, sY - 1, sX + ctx.xOffset, renameStr);
-                        if(*newStr != '\0') { ctx.selectedGroup->name = newStr; }
+                        if(*newStr != '\0') ctx.selectedGroup->name = newStr;
                         free(groupName);
                     }
                     break;
             }
         }  
+        else if(ctx.mode == ADD) {
+            addMode(&ctx);
+        }
         else if(ctx.mode == MENU) {
             ctx.running = false; // Placeholder :)
             if(input == 27) {
