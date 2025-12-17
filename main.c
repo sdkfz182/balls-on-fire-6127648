@@ -941,6 +941,17 @@ int computeGroupHighlight(TodoPage *page, TodoGroup *target) {
     return 0;
 }
 
+void updateTDLScreenDimensions(TDLContext *ctx) { 
+    getmaxyx(stdscr, ctx->maxY, ctx->maxX);
+    int baseScrWidth = 100;
+    ctx->scrWidth = baseScrWidth;
+    if((ctx->maxX/3) > baseScrWidth) { ctx->scrWidth = ctx->maxX/3; }
+    else if((baseScrWidth > ctx->maxX)) { ctx->scrWidth = ctx->maxX; }
+    ctx->xOffset = (ctx->maxX / 2 - ctx->scrWidth/2);
+    wresize(ctx->mainWindow, ctx->maxY, ctx->scrWidth);
+    move_panel(ctx->mainPanel, 0, ctx->xOffset);
+}
+
 void TodoApp() {
     TDLContext ctx = {0}; // GLOBAL VARIBAL
 
@@ -980,6 +991,7 @@ void TodoApp() {
 
     // MAIN TODO LOOP
     while(ctx.running) {
+        updateTDLScreenDimensions(&ctx);
         // GRAPHICS
         werase(ctx.mainWindow);
         box(ctx.mainWindow, 0, 0);
@@ -1201,52 +1213,6 @@ void TodoApp() {
                         break;
                 }
             }
-            /* else { // Move group
-                switch(input) {
-                    case 'K':
-                    case 'k':
-                    case KEY_UP:
-                        if(ctx.selectedGroup->prevGroup == ctx.selectedPage->groupHead) {
-                            ctx.highlight = 0;
-                            TodoGroup *temp = ctx.selectedGroup->prevGroup;
-                            switchTodoGroup(&ctx.selectedPage, &temp, &ctx.selectedGroup);
-                        }
-                        else if(ctx.selectedGroup->prevGroup != NULL) {
-                            int up = 1;
-                            if(!ctx.selectedGroup->prevGroup->collapsed) up = ctx.selectedGroup->prevGroup->todoCount + 1;
-                            ctx.highlight -= up;
-                            if(ctx.highlight < 0) ctx.highlight = 1;
-
-                            TodoGroup *temp = ctx.selectedGroup->prevGroup;
-                            switchTodoGroup(&ctx.selectedPage, &temp, &ctx.selectedGroup);
-                        }
-                        break;
-                    case 'J':
-                    case 'j':
-                    case KEY_DOWN:
-                        if(ctx.selectedGroup->nextGroup != NULL) {
-                            if(ctx.selectedGroup == ctx.selectedPage->groupHead) {
-                                ctx.highlight = 0;
-                                ctx.highlight += ctx.selectedGroup->nextGroup->todoCount + 1;
-                                TodoGroup *temp = ctx.selectedGroup->nextGroup;
-                                switchTodoGroup(&ctx.selectedPage, &ctx.selectedGroup, &temp);
-                            } 
-                            else {
-                                int down = 1;
-                                if(!ctx.selectedGroup->nextGroup->collapsed) down = ctx.selectedGroup->nextGroup->todoCount + 1;
-                                ctx.highlight += down;
-                                //if(ctx.highlight > a - 1) ctx.highlight = a - 1; 
-
-                                TodoGroup *temp = ctx.selectedGroup->nextGroup;
-                                switchTodoGroup(&ctx.selectedPage, &ctx.selectedGroup, &temp);
-                            }
-                        }
-                        break;
-                    default:
-                        ctx.mode = TODO;
-                        break;
-                }
-            } */
             else { // Move group
                 switch(input) {
                     case 'K':
